@@ -162,15 +162,21 @@ impl Airtable {
         &self,
         table: &str,
         view: &str,
+        filter_by_formula: Option<&str>,
         fields: Vec<&str>,
     ) -> Result<Vec<Record<T>>> {
         let mut params = vec![("pageSize", "100".to_string()), ("view", view.to_string())];
+
+        if let Some(filter) = filter_by_formula {
+            params.push(("filterByFormula", filter.to_string()));
+        }
+
         for field in fields {
             params.push(("fields[]", field.to_string()));
         }
 
         // Build the request.
-        let mut request = self.request(Method::GET, table.to_string(), (), Some(params))?;
+        let mut request = self.request(Method::GET, table.to_string(), (), Some(params.clone()))?;
 
         let mut resp = self.client.execute(request).await?;
         match resp.status() {
@@ -190,15 +196,12 @@ impl Airtable {
         // Paginate if we should.
         // TODO: make this more DRY
         while !offset.is_empty() {
+            params.push(("offset", offset.clone()));
             request = self.request(
                 Method::GET,
                 table.to_string(),
                 (),
-                Some(vec![
-                    ("pageSize", "100".to_string()),
-                    ("view", view.to_string()),
-                    ("offset", offset),
-                ]),
+                Some(params.clone()),
             )?;
 
             resp = self.client.execute(request).await?;
@@ -214,6 +217,7 @@ impl Airtable {
 
             records.append(&mut r.records);
 
+            params.retain(|x| *x != ("offset", offset.clone()));
             offset = r.offset;
         }
 
